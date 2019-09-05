@@ -233,12 +233,33 @@ func versionFilter(v, current, target int64) bool {
 	return false
 }
 
+// Some drivers (PGX) returns error only after rows.Next() call in rows.Err().
+func createVersionTableIfNotExists(db *sql.DB) error {
+	rows, err := GetDialect().dbVersionQuery(db)
+	if err != nil {
+		return createVersionTable(db)
+	}
+
+	defer rows.Close()
+	rows.Next()
+
+	if rows.Err() != nil {
+		return createVersionTable(db)
+	}
+
+	return nil
+}
+
 // EnsureDBVersion retrieves the current version for this DB.
 // Create and initialize the DB version table if it doesn't exist.
 func EnsureDBVersion(db *sql.DB) (int64, error) {
+	if err := createVersionTableIfNotExists(db); err != nil {
+		return 0, err
+	}
+
 	rows, err := GetDialect().dbVersionQuery(db)
 	if err != nil {
-		return 0, createVersionTable(db)
+		return 0, err
 	}
 	defer rows.Close()
 
@@ -274,6 +295,10 @@ func EnsureDBVersion(db *sql.DB) (int64, error) {
 
 		// latest version of migration has not been applied.
 		toSkip = append(toSkip, row.VersionID)
+	}
+
+	if rows.Err() != nil {
+		return 0, err
 	}
 
 	return 0, ErrNoNextVersion

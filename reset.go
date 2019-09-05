@@ -30,9 +30,13 @@ func Reset(db *sql.DB, dir string) error {
 }
 
 func dbMigrationsStatus(db *sql.DB) (map[int64]bool, error) {
+	if err := createVersionTableIfNotExists(db); err != nil {
+		return map[int64]bool{}, err
+	}
+
 	rows, err := GetDialect().dbVersionQuery(db)
 	if err != nil {
-		return map[int64]bool{}, createVersionTable(db)
+		return map[int64]bool{}, err
 	}
 	defer rows.Close()
 
@@ -52,6 +56,10 @@ func dbMigrationsStatus(db *sql.DB) (map[int64]bool, error) {
 		}
 
 		result[row.VersionID] = row.IsApplied
+	}
+
+	if rows.Err() != nil {
+		return map[int64]bool{}, err
 	}
 
 	return result, nil
